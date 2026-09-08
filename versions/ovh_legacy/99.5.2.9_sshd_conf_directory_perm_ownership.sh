@@ -1,0 +1,1 @@
+../../bin/hardening/sshd_conf_directory_perm_ownership.sh
