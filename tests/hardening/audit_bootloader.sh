@@ -49,10 +49,14 @@ EOF
     describe "Running apply from non-compliant state"
     cat >"$grub_file" <<'EOF'
 GRUB_CMDLINE_LINUX=""
-GRUB_CMDLINE_LINUX_DEFAULT="quiet"
+GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"
 EOF
     sed -i 's/audit/enabled/' "$script_cfg"
     "${CIS_CHECKS_DIR}/${script}.sh" --apply || true
+
+    describe "Checking existing GRUB arguments are preserved"
+    register_test retvalshouldbe 0
+    run preserved_args grep -qx 'GRUB_CMDLINE_LINUX_DEFAULT="quiet splash audit=1"' "$grub_file"
 
     describe "Checking resolved state after apply"
     register_test retvalshouldbe 0

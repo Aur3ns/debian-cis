@@ -28,6 +28,48 @@ AUDIT_BOOTLOADER_FILE_EXISTS=1
 AUDIT_BOOTLOADER_AUDIT_ENABLED=1
 AUDIT_BOOTLOADER_TARGET_PARAM='GRUB_CMDLINE_LINUX'
 
+# Append audit=1 without discarding existing kernel command-line arguments.
+audit_bootloader_append_audit() {
+    local param=$1 line raw value quote replacement tmp
+    line=$(grep -m1 "^${param}=" "$FILE") || return 1
+    raw=${line#*=}
+    value=$raw
+    quote=''
+    if [[ "$raw" == \"*\" && "$raw" == *\" ]]; then
+        quote='"'
+        value=${raw#\"}
+        value=${value%\"}
+    elif [[ "$raw" == \'*\' && "$raw" == *\' ]]; then
+        quote="'"
+        value=${raw#\'}
+        value=${value%\'}
+    fi
+
+    if [ -n "$value" ]; then
+        value="$value $GRUB_VALUE"
+    else
+        value="$GRUB_VALUE"
+    fi
+    if [ -n "$quote" ]; then
+        replacement="${param}=${quote}${value}${quote}"
+    else
+        replacement="${param}=\"${value}\""
+    fi
+
+    backup_file "$FILE"
+    tmp=$(mktemp)
+    while IFS= read -r line || [ -n "$line" ]; do
+        if [[ "$line" == "${param}="* ]]; then
+            printf '%s\n' "$replacement"
+        else
+            printf '%s\n' "$line"
+        fi
+    done <"$FILE" >"$tmp"
+    cat "$tmp" >"$FILE"
+    rm -f -- "$tmp"
+    FNRET=0
+}
+
 # This function will be called if the script status is on enabled / audit mode
 audit() {
     AUDIT_BOOTLOADER_FILE_EXISTS=1
@@ -74,14 +116,14 @@ apply() {
         return
     fi
 
-    debug "$AUDIT_BOOTLOADER_TARGET_PARAM should be set to $GRUB_VALUE"
+    debug "$AUDIT_BOOTLOADER_TARGET_PARAM should contain $GRUB_VALUE"
     does_pattern_exist_in_file "$FILE" "^$AUDIT_BOOTLOADER_TARGET_PARAM="
     if [ "$FNRET" != 0 ]; then
         info "Parameter $AUDIT_BOOTLOADER_TARGET_PARAM seems absent from $FILE, adding at the end"
-        add_end_of_file "$FILE" "$AUDIT_BOOTLOADER_TARGET_PARAM=$GRUB_VALUE"
+        add_end_of_file "$FILE" "$AUDIT_BOOTLOADER_TARGET_PARAM=\"$GRUB_VALUE\""
     else
-        info "Parameter $AUDIT_BOOTLOADER_TARGET_PARAM is present but with the wrong value -- Fixing"
-        replace_in_file "$FILE" "^$AUDIT_BOOTLOADER_TARGET_PARAM=.*" "$AUDIT_BOOTLOADER_TARGET_PARAM=$GRUB_VALUE"
+        info "Parameter $AUDIT_BOOTLOADER_TARGET_PARAM is present but missing $GRUB_VALUE -- Appending it"
+        audit_bootloader_append_audit "$AUDIT_BOOTLOADER_TARGET_PARAM"
     fi
 }
 
