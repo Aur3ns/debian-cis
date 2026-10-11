@@ -6,6 +6,7 @@ test_audit() {
     local script_cfg="${CIS_CONF_DIR}/conf.d/${script}.cfg"
     local grub_backup="/tmp/${script}.grub.backup.$$"
     local cfg_backup="/tmp/${script}.cfg.backup.$$"
+    local result_file="/tmp/${script}.result.$$"
     local grub_existed=1
     local cfg_existed=1
 
@@ -49,10 +50,18 @@ EOF
     describe "Running apply from non-compliant state"
     cat >"$grub_file" <<'EOF'
 GRUB_CMDLINE_LINUX=""
-GRUB_CMDLINE_LINUX_DEFAULT="quiet"
+GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"
 EOF
     sed -i 's/audit/enabled/' "$script_cfg"
     "${CIS_CHECKS_DIR}/${script}.sh" --apply || true
+
+    describe "Checking existing GRUB arguments are preserved"
+    grep '^GRUB_CMDLINE_LINUX_DEFAULT=' "$grub_file" >"$result_file"
+    chmod 644 "$result_file"
+    register_test retvalshouldbe 0
+    register_test contain 'GRUB_CMDLINE_LINUX_DEFAULT="quiet splash audit=1"'
+    # The trailing '#' comments out the --sudo that run() appends.
+    run preserved_args "cat $result_file #"
 
     describe "Checking resolved state after apply"
     register_test retvalshouldbe 0
@@ -70,4 +79,5 @@ EOF
     else
         rm -f "$script_cfg"
     fi
+    rm -f -- "$result_file"
 }
